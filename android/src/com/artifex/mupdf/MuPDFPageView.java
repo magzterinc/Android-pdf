@@ -1,73 +1,31 @@
 package com.artifex.mupdf;
-
-import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.graphics.Bitmap;
 import android.graphics.Point;
-import android.graphics.PointF;
-import android.graphics.RectF;
-import android.view.LayoutInflater;
-import android.view.WindowManager;
-import android.widget.EditText;
+import android.widget.TextView;
 
-class PassClickResult {
-	public final boolean changed;
-	public final WidgetType type;
-	public final String text;
-
-	public PassClickResult(boolean _changed, WidgetType _type, String _text) {
-		changed = _changed;
-		type = _type;
-		text = _text;
-	}
-}
-
-public class MuPDFPageView extends PageView {
+public class MuPDFPageView extends PageView
+{
 	private final MuPDFCore mCore;
-	private SafeAsyncTask<Void,Void,PassClickResult> mPassClick;
-	private RectF mWidgetAreas[];
-	private SafeAsyncTask<Void,Void,RectF[]> mLoadWidgetAreas;
-	private AlertDialog.Builder mTextEntryBuilder;
-	private AlertDialog mTextEntry;
-	private EditText mEditText;
-	private SafeAsyncTask<String,Void,Boolean> mSetWidgetText;
-
-	public MuPDFPageView(Context c, MuPDFCore core, Point parentSize) {
-		super(c, parentSize);
+	private Context mContext;
+	
+	private TextView mLeftTextView;
+	private TextView mRightTextView;
+	
+	int mTempPageNumber = 0;
+	
+	public MuPDFPageView(Context c, MuPDFCore core, Point parentSize) 
+	{
+		super(c, core, parentSize);
 		mCore = core;
-		mTextEntryBuilder = new AlertDialog.Builder(c);
-		mTextEntryBuilder.setTitle("MuPDF: fill out text field");
-		LayoutInflater inflater = (LayoutInflater)c.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-		mEditText = (EditText)inflater.inflate(R.layout.textentry, null);
-		mTextEntryBuilder.setView(mEditText);
-		mTextEntryBuilder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-			public void onClick(DialogInterface dialog, int which) {
-				dialog.dismiss();
-			}
-		});
-		mTextEntryBuilder.setPositiveButton("Okay", new DialogInterface.OnClickListener() {
-			public void onClick(DialogInterface dialog, int which) {
-				mSetWidgetText = new SafeAsyncTask<String,Void,Boolean> () {
-					@Override
-					protected Boolean doInBackground(String... arg0) {
-						return mCore.setFocusedWidgetText(mPageNumber, arg0[0]);
-					}
-					@Override
-					protected void onPostExecute(Boolean result) {
-						update();
-						if (!result)
-							invokeTextDialog(mEditText.getText().toString());
-					}
-				};
-
-				mSetWidgetText.execute(mEditText.getText().toString());
-			}
-		});
-		mTextEntry = mTextEntryBuilder.create();
+		mContext = c;
+		
+		mLeftTextView  = gettxtProgressLft();
+		mRightTextView = gettxtProgressRht();
 	}
 
-	public int hitLinkPage(float x, float y) {
+	public String[] hitLinkPage(float x, float y)
+	{
+		
 		// Since link highlighting was implemented, the super class
 		// PageView has had sufficient information to be able to
 		// perform this method directly. Making that change would
@@ -75,82 +33,119 @@ public class MuPDFPageView extends PageView {
 		float scale = mSourceScale*(float)getWidth()/(float)mSize.x;
 		float docRelX = (x - getLeft())/scale;
 		float docRelY = (y - getTop())/scale;
-
-		return mCore.hitLinkPage(mPageNumber, docRelX, docRelY);
-	}
-
-	private void invokeTextDialog(String text) {
-		mEditText.setText(text);
-		mTextEntry.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
-		mTextEntry.show();
-	}
-
-	public boolean passClickEvent(float x, float y) {
-		float scale = mSourceScale*(float)getWidth()/(float)mSize.x;
-		final float docRelX = (x - getLeft())/scale;
-		final float docRelY = (y - getTop())/scale;
-		boolean hitWidget = false;
-
-		if (mWidgetAreas != null) {
-			for (int i = 0; i < mWidgetAreas.length && !hitWidget; i++)
-				if (mWidgetAreas[i].contains(docRelX, docRelY))
-					hitWidget = true;
-		}
-
-		if (hitWidget) {
-			mPassClick = new SafeAsyncTask<Void,Void,PassClickResult>() {
-				@Override
-				protected PassClickResult doInBackground(Void... arg0) {
-					return mCore.passClickEvent(mPageNumber, docRelX, docRelY);
+		
+		if(((MuPDFActivity)mContext).screenOrientation == 1 || ((MuPDFActivity)mContext).screenOrientation == 2  && ((MuPDFActivity)mContext).isEasyMode)
+		{
+			if(mCore.mPageAnnots.get(mPageNumber) != null && mCore.mPageAnnots.get(mPageNumber).length > 0)
+			{
+				LinkInfo[] mTempLink = mCore.mPageAnnots.get(mPageNumber);
+				for (LinkInfo l: mTempLink)
+				{
+					if (l.contains(docRelX, docRelY))
+						return new String[]{l.url.toString(), ""+mPageNumber};
 				}
-
-				@Override
-				protected void onPostExecute(PassClickResult result) {
-					if (result.changed) {
-						update();
-					}
-
-					switch(result.type) {
-					case TEXT:
-						invokeTextDialog(result.text);
-						break;
-					}
-				}
-			};
-
-			mPassClick.execute();
+			}
 		}
-
-		return hitWidget;
-	}
-
-	@Override
-	protected Bitmap drawPage(int sizeX, int sizeY,
-			int patchX, int patchY, int patchWidth, int patchHeight) {
-		return mCore.drawPage(mPageNumber, sizeX, sizeY, patchX, patchY, patchWidth, patchHeight);
-	}
-
-	@Override
-	protected LinkInfo[] getLinkInfo() {
-		return mCore.getPageLinks(mPageNumber);
-	}
-
-	@Override
-	public void setPage(final int page, PointF size) {
-		mLoadWidgetAreas = new SafeAsyncTask<Void,Void,RectF[]> () {
-			@Override
-			protected RectF[] doInBackground(Void... arg0) {
-				return mCore.getWidgetAreas(page);
+		else
+		{
+			if(((MuPDFActivity)mContext).isPreview)
+			{
+				try
+				{
+					mTempPageNumber = (Integer.parseInt(((MuPDFActivity)mContext).previewPageNumbers[mPosition * 2]) - 1);
+				}
+				catch (Exception e)
+				{
+					mTempPageNumber = (Integer.parseInt(((MuPDFActivity)mContext).previewPageNumbers[(mPosition * 2) - 1]));
+				}
 			}
-
-			@Override
-			protected void onPostExecute(RectF[] result) {
-				mWidgetAreas = result;
+			else
+				mTempPageNumber = mPageNumber * 2;
+			
+			if(docRelX > ((float)getWidth() / scale) / 2)
+			{
+				docRelX = docRelX - ((float)getWidth() / scale) / 2;
+				
+				if(mCore.mPageAnnots.get(mTempPageNumber) != null && mCore.mPageAnnots.get(mTempPageNumber).length > 0)
+				{
+					LinkInfo[] mTempLink = mCore.mPageAnnots.get(mTempPageNumber);
+					for (LinkInfo l: mTempLink)
+						if (l.contains(docRelX, docRelY))
+							return new String[]{l.url.toString(), ""+mTempPageNumber};
+				}
 			}
-		};
+			else
+			{
+				mTempPageNumber = mTempPageNumber - 1;
+				if(mCore.mPageAnnots.get(mTempPageNumber) != null && mCore.mPageAnnots.get(mTempPageNumber).length > 0)
+				{
+					LinkInfo[] mTempLink = mCore.mPageAnnots.get(mTempPageNumber);
+					for (LinkInfo l: mTempLink)
+						if (l.contains(docRelX, docRelY))
+							return new String[]{l.url.toString(), ""+mTempPageNumber};
+					}
+			}
+		}
+		return null;
+	}
 
-		mLoadWidgetAreas.execute();
+	@Override
+	protected void updateProgress(int status, int visible, boolean isLft, int page) 
+	{
+		try 
+		{
+			if(((MuPDFActivity)mContext).screenOrientation == 2 && !((MuPDFActivity)mContext).isEasyMode)
+			{
+				if(isLft && visible == 1)
+				{
+					mLeftTextView.setText("           "+status+"%           ");
+					mRightTextView.setText(" Waiting to Download ");
+				}
+				else if(!(isLft) && visible == 1)
+				{
+					mLeftTextView.setText("        100%       ");
+					mRightTextView.setText("           "+status+"%           ");
+				}
+			}
+			else
+			{
+				if(visible == 1)
+					mLeftTextView.setText("          "+status+"%          ");
+			}
+		}
+		catch (Exception e)
+		{
+			
+		}
+	}
+	
+	@Override
+	protected void drawSinglePage(BitmapHolder h, int sizeX, int sizeY, int patchX, int patchY, int patchWidth, int patchHeight, String path)
+	{
+		mCore.drawSinglePage(h, mPageNumber, sizeX, sizeY, patchX, patchY, patchWidth, patchHeight, path);
+	}
 
-		super.setPage(page, size);
+	@Override
+	protected void drawPage(BitmapHolder h, int sizeX, int sizeY, int patchX, int patchY, int patchWidth, int patchHeight)
+	{
+		mCore.drawPage(h, mPageNumber, sizeX, sizeY, patchX, patchY, patchWidth, patchHeight, 0);
+	}
+	
+	@Override
+	protected void drawPageForLandscape(BitmapHolder h, int sizeX, int sizeY, int patchX, int patchY, int patchWidth, int patchHeight, int position, String path) 
+	{
+		mCore.drawPageForLandscape(h, mPageNumber, sizeX, sizeY, patchX, patchY, patchWidth, patchHeight, position, path);
+	}
+	
+	@Override
+	protected void drawPageForLandscapeZoom(BitmapHolder h, int sizeX, int sizeY, int patchX, int patchY, int patchWidth, int patchHeight, int position) 
+	{
+		mCore.drawPageForLandscapeZoom(h, mPageNumber, sizeX, sizeY, patchX, patchY, patchWidth, patchHeight, position);
+	}
+
+	@Override
+	protected void getLinkInfo(int value)
+	{
+		mCore.getPageLinks(value);
 	}
 }
