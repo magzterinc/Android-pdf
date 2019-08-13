@@ -3,6 +3,14 @@ Android application for rendering pdf files
 
 Forked from MuPDF library on 15-10-2012
 
+Features Included -
+
+1) Rich Media support 
+2) Double Spreded pages in Landscape mode
+3) Each page will be a single PDF
+
+NativeLibs:
+Native Libraries used in this application is moved to this repository, URL-> https://github.com/magzterinc/Android-pdf-nativeibs
 
 To build/debug android build.
 
